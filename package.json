@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "dev": "concurrently \"npm run api\" \"expo start\"",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
@@ -25,6 +26,7 @@
     "@types/express": "^5.0.1",
     "@types/node": "^24.0.1",
     "@types/react": "~19.2.10",
+    "concurrently": "^9.2.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.2"
   }

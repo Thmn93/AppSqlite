@@ -8,6 +8,26 @@ type UsuarioPayload = {
 	nome: string;
 	email: string;
 	cpf: string;
+	cep: string;
+	logradouro: string;
+	bairro: string;
+	cidade: string;
+	estado: string;
+	numero: string;
+	complemento: string;
+};
+
+type NormalizedUsuarioPayload = {
+	nome: string;
+	email: string;
+	cpf: string;
+	cep: string;
+	logradouro: string;
+	bairro: string;
+	cidade: string;
+	estado: string;
+	numero: string;
+	complemento: string;
 };
 
 const app = express();
@@ -28,20 +48,47 @@ async function ensureSchema() {
 			ID_US INTEGER PRIMARY KEY AUTOINCREMENT,
 			NOME_US VARCHAR(100),
 			EMAIL_US VARCHAR(100),
-			CPF_US VARCHAR(11)
+			CPF_US VARCHAR(11),
+			CEP_US VARCHAR(9),
+			LOGRADOURO_US VARCHAR(120),
+			BAIRRO_US VARCHAR(120),
+			CIDADE_US VARCHAR(120),
+			ESTADO_US VARCHAR(2),
+			NUMERO_US VARCHAR(20),
+			COMPLEMENTO_US VARCHAR(120)
 		)
 	`);
 
 	await db.exec('ALTER TABLE USUARIO ADD COLUMN CPF_US VARCHAR(11)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN CEP_US VARCHAR(9)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN LOGRADOURO_US VARCHAR(120)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN BAIRRO_US VARCHAR(120)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN CIDADE_US VARCHAR(120)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN ESTADO_US VARCHAR(2)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN NUMERO_US VARCHAR(20)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN COMPLEMENTO_US VARCHAR(120)').catch(() => null);
 }
 
-async function InserirUsuario(payload: UsuarioPayload) {
+function normalizePayload(payload: Partial<UsuarioPayload>): NormalizedUsuarioPayload {
+	return {
+		nome: payload.nome?.trim() ?? '',
+		email: payload.email?.trim() ?? '',
+		cpf: payload.cpf?.replace(/\D/g, '') ?? '',
+		cep: payload.cep?.replace(/\D/g, '') ?? '',
+		logradouro: payload.logradouro?.trim() ?? '',
+		bairro: payload.bairro?.trim() ?? '',
+		cidade: payload.cidade?.trim() ?? '',
+		estado: payload.estado?.trim() ?? '',
+		numero: payload.numero?.trim() ?? '',
+		complemento: payload.complemento?.trim() ?? '',
+	};
+}
+
+async function InserirUsuario(payload: Partial<UsuarioPayload>) {
 	const db = await dbPromise;
 	await db.run(
-		'INSERT INTO USUARIO(NOME_US, EMAIL_US, CPF_US) VALUES(?,?,?)',
-		payload.nome,
-		payload.email,
-		payload.cpf,
+		'INSERT INTO USUARIO(NOME_US, EMAIL_US, CPF_US, CEP_US, LOGRADOURO_US, BAIRRO_US, CIDADE_US, ESTADO_US, NUMERO_US, COMPLEMENTO_US) VALUES(?,?,?,?,?,?,?,?,?,?)',
+		...Object.values(normalizePayload(payload)),
 	);
 }
 
@@ -92,12 +139,20 @@ app.post('/usuarios', async (req: Request, res: Response) => {
 app.put('/usuarios/:id', async (req: Request, res: Response) => {
 	try {
 		const payload = req.body as UsuarioPayload;
+		const normalizedPayload = normalizePayload(payload);
 		const db = await dbPromise;
 		await db.run(
-			'UPDATE USUARIO SET NOME_US = ?, EMAIL_US = ?, CPF_US = ? WHERE ID_US = ?',
-			payload.nome,
-			payload.email,
-			payload.cpf,
+			'UPDATE USUARIO SET NOME_US = ?, EMAIL_US = ?, CPF_US = ?, CEP_US = ?, LOGRADOURO_US = ?, BAIRRO_US = ?, CIDADE_US = ?, ESTADO_US = ?, NUMERO_US = ?, COMPLEMENTO_US = ? WHERE ID_US = ?',
+			normalizedPayload.nome,
+			normalizedPayload.email,
+			normalizedPayload.cpf,
+			normalizedPayload.cep,
+			normalizedPayload.logradouro,
+			normalizedPayload.bairro,
+			normalizedPayload.cidade,
+			normalizedPayload.estado,
+			normalizedPayload.numero,
+			normalizedPayload.complemento,
 			Number(req.params.id),
 		);
 		res.json({ message: 'Cadastro atualizado com sucesso.' });
@@ -117,7 +172,7 @@ app.delete('/usuarios/:id', async (req: Request, res: Response) => {
 });
 
 ensureSchema().then(() => {
-	app.listen(PORT, () => {
+	app.listen(PORT, '0.0.0.0', () => {
 		console.log(`API local em http://localhost:${PORT}`);
 	});
 });
