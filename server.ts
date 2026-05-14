@@ -8,6 +8,13 @@ type UsuarioPayload = {
 	nome: string;
 	email: string;
 	cpf: string;
+	cep?: string;
+	logradouro?: string;
+	bairro?: string;
+	cidade?: string;
+	estado?: string;
+	numero?: string;
+	complemento?: string;
 };
 
 const app = express();
@@ -28,20 +35,43 @@ async function ensureSchema() {
 			ID_US INTEGER PRIMARY KEY AUTOINCREMENT,
 			NOME_US VARCHAR(100),
 			EMAIL_US VARCHAR(100),
-			CPF_US VARCHAR(11)
+			CPF_US VARCHAR(11),
+			CEP_US VARCHAR(20),
+			LOGRADOURO_US VARCHAR(200),
+			BAIRRO_US VARCHAR(200),
+			CIDADE_US VARCHAR(100),
+			ESTADO_US VARCHAR(50),
+			NUMERO_US VARCHAR(30),
+			COMPLEMENTO_US VARCHAR(200)
 		)
 	`);
 
-	await db.exec('ALTER TABLE USUARIO ADD COLUMN CPF_US VARCHAR(11)').catch(() => null);
+	// Ensure columns exist for older DBs: attempt to add each column if missing
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN CEP_US VARCHAR(20)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN LOGRADOURO_US VARCHAR(200)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN BAIRRO_US VARCHAR(200)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN CIDADE_US VARCHAR(100)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN ESTADO_US VARCHAR(50)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN NUMERO_US VARCHAR(30)').catch(() => null);
+	await db.exec('ALTER TABLE USUARIO ADD COLUMN COMPLEMENTO_US VARCHAR(200)').catch(() => null);
+	// Create unique index to enforce CPF uniqueness at DB level
+	await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_usuario_cpf ON USUARIO(CPF_US)').catch(() => null);
 }
 
 async function InserirUsuario(payload: UsuarioPayload) {
 	const db = await dbPromise;
 	await db.run(
-		'INSERT INTO USUARIO(NOME_US, EMAIL_US, CPF_US) VALUES(?,?,?)',
+		'INSERT INTO USUARIO(NOME_US, EMAIL_US, CPF_US, CEP_US, LOGRADOURO_US, BAIRRO_US, CIDADE_US, ESTADO_US, NUMERO_US, COMPLEMENTO_US) VALUES(?,?,?,?,?,?,?,?,?,?)',
 		payload.nome,
 		payload.email,
-		payload.cpf,
+		(payload.cpf ?? '').replace(/\D/g, ''),
+		payload.cep ?? '',
+		payload.logradouro ?? '',
+		payload.bairro ?? '',
+		payload.cidade ?? '',
+		payload.estado ?? '',
+		payload.numero ?? '',
+		payload.complemento ?? '',
 	);
 }
 
@@ -52,7 +82,12 @@ async function selectUsuarios() {
 
 async function SelectUsuariosId(cpf: string) {
 	const db = await dbPromise;
-	return db.get('SELECT * FROM USUARIO WHERE CPF_US = ?', cpf);
+	const normalized = (cpf ?? '').replace(/\D/g, '');
+	// Normalize stored CPF by removing dots, dashes and spaces before comparing
+	return db.get(
+		"SELECT * FROM USUARIO WHERE REPLACE(REPLACE(REPLACE(CPF_US, '.', ''), '-', ''), ' ', '') = ?",
+		normalized,
+	);
 }
 
 app.get('/usuarios', async (_req: Request, res: Response) => {
@@ -82,6 +117,11 @@ app.get('/usuarios/cpf/:cpf', async (req: Request, res: Response) => {
 app.post('/usuarios', async (req: Request, res: Response) => {
 	try {
 		const payload = req.body as UsuarioPayload;
+		// Prevent duplicate CPF
+		const existing = await SelectUsuariosId(payload.cpf ?? '');
+		if (existing) {
+			return res.status(409).json({ message: 'CPF ja cadastrado.' });
+		}
 		await InserirUsuario(payload);
 		res.status(201).json({ message: 'Cadastro realizado com sucesso.' });
 	} catch {
@@ -93,11 +133,24 @@ app.put('/usuarios/:id', async (req: Request, res: Response) => {
 	try {
 		const payload = req.body as UsuarioPayload;
 		const db = await dbPromise;
+		// Prevent duplicate CPF on update (exclude current record)
+		const existing = await SelectUsuariosId(payload.cpf ?? '');
+		if (existing && Number(existing.ID_US) !== Number(req.params.id)) {
+			return res.status(409).json({ message: 'CPF ja cadastrado por outro registro.' });
+		}
+
 		await db.run(
-			'UPDATE USUARIO SET NOME_US = ?, EMAIL_US = ?, CPF_US = ? WHERE ID_US = ?',
+			'UPDATE USUARIO SET NOME_US = ?, EMAIL_US = ?, CPF_US = ?, CEP_US = ?, LOGRADOURO_US = ?, BAIRRO_US = ?, CIDADE_US = ?, ESTADO_US = ?, NUMERO_US = ?, COMPLEMENTO_US = ? WHERE ID_US = ?',
 			payload.nome,
 			payload.email,
-			payload.cpf,
+			(payload.cpf ?? '').replace(/\D/g, ''),
+			payload.cep ?? '',
+			payload.logradouro ?? '',
+			payload.bairro ?? '',
+			payload.cidade ?? '',
+			payload.estado ?? '',
+			payload.numero ?? '',
+			payload.complemento ?? '',
 			Number(req.params.id),
 		);
 		res.json({ message: 'Cadastro atualizado com sucesso.' });
